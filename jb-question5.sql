@@ -33,4 +33,39 @@ ORDER BY decade;
 --There is a trend of both strikeouts and home runs gradually increasing over the decades overall.
 --What factors might have lead to this gradual increase?
 --Could this be the results of better and more rigerous athletic training?
---Could this be the results of rule changes and better equipment?
+--Could this be the results of rule changes or better equipment?
+--Consider other insights as to the cause of this trend. 
+
+
+--****************************************************************************************************
+--Alternative Solutions:
+
+--Here I used CTEs and achieved the same results.
+WITH decade_stats AS (
+    SELECT 
+        (yearid / 10) * 10 AS decade,
+        SUM(so) AS total_strikeouts,
+        SUM(hr) AS total_home_runs,
+        SUM(g) AS total_games
+    FROM teams
+    WHERE yearid >= 1920
+    GROUP BY (yearid / 10) * 10
+)
+SELECT 
+    decade,
+    ROUND(total_strikeouts * 1.0 / total_games, 2) AS avg_strikeouts_per_game,
+    ROUND(total_home_runs * 1.0 / total_games, 2) AS avg_home_runs_per_game
+FROM decade_stats
+ORDER BY decade;
+
+
+
+--It also dawned on me that FLOOR function can do this in Excel so tried it out here and got the same results.
+SELECT 
+    FLOOR(yearid / 10) * 10 AS decade,
+    ROUND(SUM(so)::numeric / SUM(g), 2) AS avg_strikeouts_per_game,
+    ROUND(SUM(hr)::numeric / SUM(g), 2) AS avg_home_runs_per_game
+FROM teams
+WHERE yearid >= 1920
+GROUP BY decade
+ORDER BY decade;
