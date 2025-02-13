@@ -17,41 +17,58 @@ ORDER BY teams.yearid DESC, teams.teamid;  --order by year and team
 --this gets a list comparing total wins and salaries, but it's hard to sort in a way to see a clear coorelation. 
 
 
---calculate total salary per team in each year
-SELECT 
-     salaries.yearid,  --select year
-     salaries.teamid,  --select teamid
-     SUM(salaries.salary) AS total_salary  --sum of salaries for each team in a given year
-FROM salaries  -- from salaries table
-GROUP BY salaries.yearid, salaries.teamid  --group by year and team
-ORDER BY salaries.yearid DESC, total_salary DESC;  --order by year desc and total salary desc
-
-
-
---calculate salary rank per team per year
-WITH team_salary_totals AS ( --compute total salary per team per year
-SELECT 
-      salaries.yearid,  --select year
-      salaries.teamid,  --select teamid
-      SUM(salaries.salary) AS total_salary  --sum salaries per team per year
-FROM salaries  --from salaries table
-GROUP BY salaries.yearid, salaries.teamid  --group by year and team
+--rank wins and salaries to see a correlation
+WITH team_salary_totals AS (
+    SELECT 
+        salaries.yearid,  --select year
+        salaries.teamid,  --select teamid
+        SUM(salaries.salary) AS total_salary  --sum salaries per team per year
+    FROM salaries  --from salaries table
+    WHERE salaries.yearid > 2000  --year greater than 2000
+    GROUP BY salaries.yearid, salaries.teamid  --group by salaries
 ), 
-
-salary_rankings AS (  --calculate rank based on number of teams with a higher salary
-SELECT 
-      team_salary_totals.yearid,  --select year
-      team_salary_totals.teamid,  --select teamid
-      team_salary_totals.total_salary,  --total salary of team
-(SELECT COUNT(*) + 1  --count teams with a higher salary
-FROM team_salary_totals AS comparison_teams
-WHERE comparison_teams.yearid = team_salary_totals.yearid  --match year
-AND comparison_teams.total_salary > team_salary_totals.total_salary) AS salary_rank  --rank based on salary
-FROM team_salary_totals  --all teams
+team_wins_totals AS (
+    SELECT 
+        teams.yearid,  
+        teams.teamid,  
+        SUM(teams.w) AS total_wins  --sum wins
+    FROM teams  
+    WHERE teams.yearid > 2000  
+    GROUP BY teams.yearid, teams.teamid  
+), 
+salary_rankings AS (
+    SELECT 
+        team_salary_totals.yearid,  
+        team_salary_totals.teamid,  
+        team_salary_totals.total_salary,  
+        (SELECT COUNT(*) + 1  --count teams with a higher salary
+         FROM team_salary_totals AS comparison_teams
+         WHERE comparison_teams.yearid = team_salary_totals.yearid  
+         AND comparison_teams.total_salary > team_salary_totals.total_salary) AS salary_rank  
+    FROM team_salary_totals  
+),
+win_rankings AS (
+    SELECT 
+        team_wins_totals.yearid,  
+        team_wins_totals.teamid,  
+        team_wins_totals.total_wins,  
+        (SELECT COUNT(*) + 1  --count teams with more wins
+         FROM team_wins_totals AS comparison_teams
+         WHERE comparison_teams.yearid = team_wins_totals.yearid  
+         AND comparison_teams.total_wins > team_wins_totals.total_wins) AS win_rank  
+    FROM team_wins_totals  
 )
-
-SELECT * FROM salary_rankings  --select all ranks
-ORDER BY yearid DESC, salary_rank;  --order by year desc and rank asc
+SELECT 
+    salary_rankings.yearid,  
+    salary_rankings.teamid,  
+    salary_rankings.total_salary,  
+    salary_rankings.salary_rank,  
+    win_rankings.total_wins,  
+    win_rankings.win_rank  
+FROM salary_rankings  
+JOIN win_rankings 
+ON salary_rankings.yearid = win_rankings.yearid AND salary_rankings.teamid = win_rankings.teamid  
+ORDER BY salary_rankings.yearid DESC, salary_rankings.salary_rank, win_rankings.win_rank;
 
 
 
@@ -76,6 +93,24 @@ GROUP BY teams.yearid
 ORDER BY teams.yearid DESC;
 
 
+--compare wins and attendance change from previous year
+SELECT 
+    current_year.yearid,  --select yearid
+    current_year.name AS team_name,  --select teamid use team name this time
+	current_year.w AS current_year_wins,
+	previous_year.w AS previous_year_wins,
+    current_year.attendance AS current_year_attendance,  --select attendace
+    previous_year.attendance AS previous_year_attendance,  --previous year attendance
+    (current_year.attendance - previous_year.attendance) AS attendance_change  --difference
+	
+FROM teams current_year
+LEFT JOIN teams previous_year  --join with previous year
+ON current_year.teamid = previous_year.teamid 
+AND current_year.yearid = previous_year.yearid + 1  
+WHERE current_year.yearid BETWEEN 2000 AND 2016
+ORDER BY current_year.yearid DESC;
+
+
 --show attendance changes for world series winners
 SELECT 
     current_year.yearid,  --year
@@ -84,9 +119,9 @@ SELECT
     previous_year.attendance AS previous_year_attendance,  --previous years attendance
     (current_year.attendance - previous_year.attendance) AS attendance_change  --difference
 FROM teams current_year
-LEFT JOIN teams previous_year
+LEFT JOIN teams previous_year  --join with previous year
 ON current_year.teamid = previous_year.teamid 
-AND current_year.yearid = previous_year.yearid + 1  --join with previous year
+AND current_year.yearid = previous_year.yearid + 1  
 WHERE current_year.wswin = 'Y'  --filter for World Series winners
 AND current_year.yearid BETWEEN 2000 AND 2016
 ORDER BY current_year.yearid DESC;
@@ -120,7 +155,7 @@ SELECT
     people.throws AS throwing_hand,  --throwing hand (L or R)
     COUNT(*) AS pitcher_count  --total number of pitchers
 FROM pitching  
-JOIN people join to people
+JOIN people --join to people
 ON pitching.playerid = people.playerid  --match players
 WHERE people.throws IN ('L', 'R')  --filter for L and R pitchers
 GROUP BY people.throws  
@@ -138,6 +173,7 @@ JOIN people
 ON pitching.playerid = people.playerid  
 WHERE people.throws IN ('L', 'R');
 
+
 --count Cy Young award winners by throwing hand
 SELECT 
     people.throws AS throwing_hand,  
@@ -145,16 +181,17 @@ SELECT
 FROM awardsplayers  
 JOIN people  
 ON awardsplayers.playerid = people.playerid  
-WHERE awardsplayers.awardid = 'Cy Young'  
+WHERE awardsplayers.awardid = 'Cy Young Award'  
 AND people.throws IN ('L', 'R')  
 GROUP BY people.throws  
 ORDER BY cy_young_wins DESC;
 
 
---count hall of fame inductees by throwing hand
+--percentage of inductees by throwing hand
 SELECT 
     people.throws AS throwing_hand,  
-    COUNT(*) AS hall_of_fame_inductions  
+    COUNT(*) AS hall_of_fame_inductions,  
+    COUNT(*) * 100.0 / (SELECT COUNT(*) FROM people WHERE throws = people.throws) AS induction_percentage
 FROM halloffame  
 JOIN people  
 ON halloffame.playerid = people.playerid  
@@ -162,3 +199,4 @@ WHERE halloffame.inducted = 'Y'
 AND people.throws IN ('L', 'R')  
 GROUP BY people.throws  
 ORDER BY hall_of_fame_inductions DESC;
+
